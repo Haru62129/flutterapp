@@ -1,125 +1,186 @@
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const MoodDiaryApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MoodDiaryApp extends StatelessWidget {
+  const MoodDiaryApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: '気分日記',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MoodHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class MoodHomePage extends StatefulWidget {
+  const MoodHomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<MoodHomePage> createState() => _MoodHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MoodHomePageState extends State<MoodHomePage> {
+  String? selectedMood;
+  final TextEditingController _noteController = TextEditingController();
+  Map<String, dynamic> moodLog = {};
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    super.initState();
+    _loadSampleData();
+  }
+
+  void _loadSampleData() {
+    // サンプルデータを読み込む (SharedPreferencesの代わり)
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      moodLog = {
+        '2025-05-10': {'mood': 'happy', 'note': 'とても良い日だった！'},
+        '2025-05-11': {'mood': 'sad', 'note': '少し疲れていた'},
+      };
     });
+  }
+
+  void saveTodayMood() {
+    // コンテキストを事前にローカル変数に保存
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    
+    if (selectedMood == null) return;
+
+    setState(() {
+      moodLog[today] = {
+        'mood': selectedMood,
+        'note': _noteController.text
+      };
+      
+      // 保存後にクリア
+      _noteController.clear();
+      selectedMood = null;
+    });
+
+    // フィードバック表示
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(content: Text('気分を記録しました')),
+    );
+  }
+
+  Widget buildMoodButton(String emoji, String mood) {
+    return GestureDetector(
+      onTap: () => setState(() => selectedMood = mood),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selectedMood == mood ? Colors.blue[100] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          emoji,
+          style: const TextStyle(fontSize: 32),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('気分日記'),
+        elevation: 0,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("今日の気分は？", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                buildMoodButton('😊', 'happy'),
+                buildMoodButton('😐', 'neutral'),
+                buildMoodButton('😞', 'sad'),
+                buildMoodButton('😀', 'excited'),
+                buildMoodButton('😴', 'tired'),
+              ],
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            const SizedBox(height: 20),
+            const Text("ひとこと日記", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '今日の気分について書いてみよう',
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: selectedMood == null ? null : saveTodayMood,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('今日の記録を保存する', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text("過去の記録", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Expanded(
+              child: moodLog.isEmpty
+                  ? const Center(child: Text('まだ記録がありません'))
+                  : ListView.builder(
+                      itemCount: moodLog.length,
+                      itemBuilder: (context, index) {
+                        final date = moodLog.keys.toList().reversed.toList()[index];
+                        final entry = moodLog[date]!;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: Text(
+                              _emojiFor(entry['mood']),
+                              style: const TextStyle(fontSize: 24),
+                            ),
+                            title: Text(date),
+                            subtitle: Text(entry['note'] ?? ''),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
+  }
+
+  String _emojiFor(String mood) {
+    switch (mood) {
+      case 'happy':
+        return '😊';
+      case 'neutral':
+        return '😐';
+      case 'sad':
+        return '😞';
+      case 'excited':
+        return '😀';
+      case 'tired':
+        return '😴';
+      default:
+        return '';
+    }
   }
 }

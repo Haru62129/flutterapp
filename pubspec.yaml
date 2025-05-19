@@ -10,15 +10,17 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.2
-  # SharedPreferencesの代わりにメモリ内で状態管理
+
+  # 最新版に合わせて
+  shared_preferences: ^2.0.15
+  fl_chart: ^0.65.0
+  intl: ^0.19.0
+
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
-  
-  shared_preferences: ^2.2.0  # データの永続化
-  intl: ^0.18.0               # 日付フォーマット
 
 flutter:
   uses-material-design: true

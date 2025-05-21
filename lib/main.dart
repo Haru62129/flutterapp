@@ -1,12 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
-void main() {
-  runApp(const MoodDiaryApp());
-}
+void main() => runApp(const MoodDiaryApp());
 
 class MoodDiaryApp extends StatelessWidget {
   const MoodDiaryApp({super.key});
@@ -15,8 +19,13 @@ class MoodDiaryApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'きぶん日記',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData(
+        fontFamily: 'MPLUSRounded1c',
+        scaffoldBackgroundColor: const Color(0xFFFFF9F0),
+        primarySwatch: Colors.orange,
+      ),
       home: const MoodHomePage(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -28,7 +37,7 @@ class MoodHomePage extends StatefulWidget {
   State<MoodHomePage> createState() => _MoodHomePageState();
 }
 
-class _MoodHomePageState extends State<MoodHomePage> {
+class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderStateMixin {
   String? selectedMood;
   final TextEditingController _noteController = TextEditingController();
   Map<String, dynamic> moodLog = {};
@@ -37,10 +46,49 @@ class _MoodHomePageState extends State<MoodHomePage> {
   int selectedYear = DateTime.now().year;
   int selectedMonth = DateTime.now().month;
 
+  File? _selectedImage;
+
+  late AnimationController _msgController;
+  late Animation<double> _msgAnimation;
+
+  final Map<String, List<String>> moodMessages = {
+    'excited': ['最高の気分！', '今日も全力だ！', 'ワクワクが止まらない！'],
+    'happy': ['いい日だね！', 'ニコニコ笑顔で！', 'ハッピーを感じてる？'],
+    'neutral': ['穏やかな一日を', 'まあまあだね', '今日もぼちぼち'],
+    'sad': ['大丈夫、明日はきっと', 'ゆっくり休んでね', '辛い時もあるよね'],
+    'angry': ['深呼吸しよう', '気持ちを落ち着けて', 'イライラはバイバイ！'],
+    'tired': ['よく頑張ったね', 'ゆっくり休んでね', '疲れは溜めすぎないで'],
+  };
+
+  final Map<String, String> moodEmojiMap = {
+    'excited': '🤩',
+    'happy': '😄',
+    'neutral': '😐',
+    'sad': '😢',
+    'angry': '😡',
+    'tired': '😴',
+  };
+
   @override
   void initState() {
     super.initState();
     _loadMoodLog();
+
+    _msgController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _msgAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _msgController, curve: Curves.elasticOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _msgController.dispose();
+    _noteController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMoodLog() async {
@@ -56,6 +104,19 @@ class _MoodHomePageState extends State<MoodHomePage> {
     }
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = path.basename(picked.path);
+      final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
+      setState(() {
+        _selectedImage = savedImage;
+      });
+    }
+  }
+
   Future<void> saveTodayMood() async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final today = DateTime.now().toIso8601String().split('T')[0];
@@ -66,9 +127,11 @@ class _MoodHomePageState extends State<MoodHomePage> {
       moodLog[today] = {
         'mood': selectedMood,
         'note': _noteController.text,
+        'imagePath': _selectedImage?.path,
       };
       _noteController.clear();
       selectedMood = null;
+      _selectedImage = null;
       hasRecordedToday = true;
     });
 
@@ -79,46 +142,102 @@ class _MoodHomePageState extends State<MoodHomePage> {
     scaffoldMessenger.showSnackBar(
       const SnackBar(content: Text('気分を記録しました')),
     );
+
+    _showMessagePopup(moodLog[today]!['mood']);
   }
 
-  Widget buildMoodButton(String emoji, String mood) {
-    return GestureDetector(
-      onTap: hasRecordedToday ? null : () => setState(() => selectedMood = mood),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: selectedMood == mood ? Colors.blue[100] : Colors.grey[200],
-          borderRadius: BorderRadius.circular(10),
+  void _showMessagePopup(String mood) {
+    final messages = moodMessages[mood] ?? ['今日もがんばろう！'];
+    final randomMsg = (messages..shuffle()).first;
+
+    _msgController.reset();
+    _msgController.forward();
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => Center(
+        child: ScaleTransition(
+          scale: _msgAnimation,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 280,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.5),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    moodEmojiMap[mood] ?? '🙂',
+                    style: const TextStyle(fontSize: 64),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    randomMsg,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK', style: TextStyle(fontSize: 18)),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        child: Text(emoji, style: const TextStyle(fontSize: 32)),
       ),
     );
   }
 
-  String _emojiFor(String mood) {
-    switch (mood) {
-      case 'happy':
-        return '😊';
-      case 'neutral':
-        return '😐';
-      case 'sad':
-        return '😞';
-      case 'excited':
-        return '😀';
-      case 'tired':
-        return '😴';
-      default:
-        return '';
-    }
+  Widget buildMoodButton(String emoji, String mood) {
+    final isSelected = selectedMood == mood;
+    return GestureDetector(
+      onTap: hasRecordedToday ? null : () => setState(() => selectedMood = mood),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.orange[100] : Colors.orange[50],
+          shape: BoxShape.circle,
+          boxShadow: isSelected
+              ? [BoxShadow(color: Colors.orange.shade200, blurRadius: 10, spreadRadius: 1)]
+              : [],
+        ),
+        child: isSelected
+            ? ScaleTransition(
+                scale: Tween<double>(begin: 1.0, end: 1.3)
+                    .animate(CurvedAnimation(parent: _msgController, curve: Curves.easeInOut)),
+                child: Text(emoji, style: const TextStyle(fontSize: 32)),
+              )
+            : Text(emoji, style: const TextStyle(fontSize: 32)),
+      ),
+    );
   }
 
   String formatWeekLabel(DateTime date) {
-    final month = date.month;
-    final day = date.day;
-    final firstDayOfMonth = DateTime(date.year, month, 1);
-    final firstWeekday = firstDayOfMonth.weekday % 7;
-    final weekNumber = ((day + firstWeekday - 1) / 7).floor() + 1;
-    return '${month}月第${weekNumber}週';
+    final firstDay = DateTime(date.year, date.month, 1);
+    final firstWeekday = firstDay.weekday % 7;
+    final weekNumber = ((date.day + firstWeekday - 1) / 7).floor() + 1;
+    return '${date.month}月第$weekNumber週';
   }
 
   Map<String, int> _generateMoodFrequencyByWeek() {
@@ -130,161 +249,234 @@ class _MoodHomePageState extends State<MoodHomePage> {
         final weekLabel = formatWeekLabel(date);
         final mood = entry['mood'];
         result.putIfAbsent(weekLabel, () => {
-              'happy': 0,
-              'neutral': 0,
-              'sad': 0,
-              'excited': 0,
-              'tired': 0,
-            });
+          'excited': 0,
+          'happy': 0,
+          'neutral': 0,
+          'sad': 0,
+          'angry': 0,
+          'tired': 0,
+        });
         result[weekLabel]![mood] = result[weekLabel]![mood]! + 1;
       }
     });
 
-    final moodCounts = <String, int>{};
-    for (var week in result.values) {
-      week.forEach((mood, count) {
-        moodCounts[mood] = (moodCounts[mood] ?? 0) + count;
-      });
-    }
-    return moodCounts;
-  }
+    final moodCounts = <String, int>{
+      'excited': 0,
+      'happy': 0,
+      'neutral': 0,
+      'sad': 0,
+      'angry': 0,
+      'tired': 0,
+    };
 
-  List<BarChartGroupData> _generateBarChart() {
-    final moodCounts = _generateMoodFrequencyByWeek();
-    final moods = ['sad', 'tired', 'neutral', 'happy', 'excited'];
-    return List.generate(moods.length, (i) {
-      final count = moodCounts[moods[i]] ?? 0;
-      return BarChartGroupData(x: i, barRods: [
-        BarChartRodData(toY: count.toDouble(), color: Colors.blue, width: 20),
-      ]);
+    result.forEach((week, moods) {
+      moods.forEach((mood, count) {
+        moodCounts[mood] = moodCounts[mood]! + count;
+      });
     });
+
+    return moodCounts;
   }
 
   @override
   Widget build(BuildContext context) {
-    final sortedDates = moodLog.keys.toList()..sort();
-    final yearList = List.generate(DateTime.now().year - 2000 + 1, (i) => 2000 + i); // 2000年から今年まで
-    final monthList = List.generate(12, (i) => i + 1);
+    final weeks = <String>[];
+    final now = DateTime.now();
+    final firstDay = DateTime(selectedYear, selectedMonth, 1);
+    final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+
+    for (int d = 1; d <= daysInMonth; d++) {
+      final date = DateTime(selectedYear, selectedMonth, d);
+      final weekLabel = formatWeekLabel(date);
+      if (!weeks.contains(weekLabel)) weeks.add(weekLabel);
+    }
+
+    final moodFrequency = _generateMoodFrequencyByWeek();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('きぶん日記')),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text("今日の気分は？", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
+      appBar: AppBar(
+        title: const Text('きぶん日記'),
+        centerTitle: true,
+        backgroundColor: Colors.orange,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Column(
+            children: [
+              // 月選択ドロップダウン
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  buildMoodButton('😊', 'happy'),
-                  buildMoodButton('😐', 'neutral'),
-                  buildMoodButton('😞', 'sad'),
-                  buildMoodButton('😀', 'excited'),
-                  buildMoodButton('😴', 'tired'),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Text("ひとこと", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _noteController,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: '今日の気分について書いてみよう',
-                ),
-                enabled: !hasRecordedToday,
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: (selectedMood == null || hasRecordedToday) ? null : saveTodayMood,
-                  child: const Text('今日の記録を保存する'),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text("過去の記録", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: sortedDates.length,
-                itemBuilder: (context, index) {
-                  final date = sortedDates.reversed.toList()[index];
-                  final entry = moodLog[date];
-                  return Card(
-                    child: ListTile(
-                      leading: Text(_emojiFor(entry['mood']), style: const TextStyle(fontSize: 24)),
-                      title: Text(date),
-                      subtitle: Text(entry['note']),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-              const Text("気分グラフ", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   DropdownButton<int>(
                     value: selectedYear,
-                    items: yearList
-                        .map((y) => DropdownMenuItem(value: y, child: Text('$y年')))
-                        .toList(),
-                    onChanged: (val) => setState(() => selectedYear = val!),
+                    items: List.generate(5, (index) {
+                      final year = now.year - 2 + index;
+                      return DropdownMenuItem(
+                        value: year,
+                        child: Text('$year年'),
+                      );
+                    }),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          selectedYear = val;
+                          hasRecordedToday = false;
+                          _loadMoodLog();
+                        });
+                      }
+                    },
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   DropdownButton<int>(
                     value: selectedMonth,
-                    items: monthList
-                        .map((m) => DropdownMenuItem(value: m, child: Text('$m月')))
-                        .toList(),
-                    onChanged: (val) => setState(() => selectedMonth = val!),
+                    items: List.generate(12, (index) {
+                      final month = index + 1;
+                      return DropdownMenuItem(
+                        value: month,
+                        child: Text('$month月'),
+                      );
+                    }),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          selectedMonth = val;
+                          hasRecordedToday = false;
+                          _loadMoodLog();
+                        });
+                      }
+                    },
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+
+              // グラフ表示
               SizedBox(
-                height: 200,
+                height: 300,
                 child: BarChart(
                   BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: 10,
+                    barTouchData: BarTouchData(enabled: false),
                     titlesData: FlTitlesData(
-                      topTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false), // 上の数字非表示
-                      ),
-                      rightTitles: AxisTitles(
-                        sideTitles: SideTitles(showTitles: false), // 右の数字非表示
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 60, // ここを増やして下部のスペースを確保
+                          getTitlesWidget: (value, meta) {
+                            if (value.toInt() < 0 || value.toInt() >= moodEmojiMap.length) {
+                              return const SizedBox.shrink();
+                            }
+                            final mood = moodEmojiMap.entries.elementAt(value.toInt());
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    mood.value,
+                                    style: const TextStyle(fontSize: 20),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    mood.key,
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
                       leftTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
-                          interval: 1,
+                          interval: 2,
+                          reservedSize: 30,
                           getTitlesWidget: (value, meta) {
-                            if (value % 1 != 0) return Container(); // 0.5は非表示
-                            if (value < 0) return Container();
+                            if (value % 2 != 0) return const SizedBox.shrink();
                             return Text(value.toInt().toString());
                           },
                         ),
                       ),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          getTitlesWidget: (value, meta) {
-                            const labels = ['😞', '😴', '😐', '😊', '😀'];
-                            if (value.toInt() < 0 || value.toInt() >= labels.length) return Container();
-                            return Text(labels[value.toInt()], style: const TextStyle(fontSize: 16));
-                          },
-                        ),
-                      ),
+                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     ),
-                    barGroups: _generateBarChart(),
-                    gridData: FlGridData(show: false),
+                    barGroups: List.generate(moodEmojiMap.length, (index) {
+                      final mood = moodEmojiMap.entries.elementAt(index).key;
+                      final count = moodFrequency[mood]?.toDouble() ?? 0;
+                      return BarChartGroupData(
+                        x: index,
+                        barRods: [
+                          BarChartRodData(
+                            toY: count,
+                            width: 25, // バーの幅を広げる
+                            color: Colors.orange,
+                            borderRadius: BorderRadius.circular(6),
+                          )
+                        ],
+                      );
+                    }),
+                    gridData: FlGridData(show: true),
                     borderData: FlBorderData(show: false),
+                    groupsSpace: 36, // グループ間のスペースを増やす
                   ),
                 ),
               ),
-            ]),
+              const SizedBox(height: 32),
+
+              // 今日の気分入力欄
+              if (!hasRecordedToday) ...[
+                const Text('今日の気分を選んでください', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  children: moodEmojiMap.entries
+                      .map((e) => buildMoodButton(e.value, e.key))
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _noteController,
+                  decoration: const InputDecoration(
+                    labelText: 'メモ（任意）',
+                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.image),
+                      label: const Text('画像選択'),
+                      onPressed: _pickImage,
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: selectedMood == null ? null : saveTodayMood,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: const Text('記録する', style: TextStyle(fontSize: 18)),
+                    ),
+                  ],
+                ),
+                if (_selectedImage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Image.file(_selectedImage!, width: 120, height: 120, fit: BoxFit.cover),
+                  ),
+              ] else ...[
+                const Text('本日はすでに記録済みです', style: TextStyle(fontSize: 16, color: Colors.grey)),
+              ],
+            ],
           ),
         ),
       ),

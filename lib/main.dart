@@ -310,8 +310,8 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                 children: [
                   DropdownButton<int>(
                     value: selectedYear,
-                    items: List.generate(5, (index) {
-                      final year = now.year - 2 + index;
+                    items: List.generate(now.year - 2000 + 1, (index) {
+                      final year = 2000 + index;
                       return DropdownMenuItem(
                         value: year,
                         child: Text('$year年'),
@@ -348,81 +348,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                     },
                   ),
                 ],
-              ),
-              const SizedBox(height: 24),
-
-              // グラフ表示
-              SizedBox(
-                height: 300,
-                child: BarChart(
-                  BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    maxY: 10,
-                    barTouchData: BarTouchData(enabled: false),
-                    titlesData: FlTitlesData(
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 60, // ここを増やして下部のスペースを確保
-                          getTitlesWidget: (value, meta) {
-                            if (value.toInt() < 0 || value.toInt() >= moodEmojiMap.length) {
-                              return const SizedBox.shrink();
-                            }
-                            final mood = moodEmojiMap.entries.elementAt(value.toInt());
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    mood.value,
-                                    style: const TextStyle(fontSize: 20),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    mood.key,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          interval: 2,
-                          reservedSize: 30,
-                          getTitlesWidget: (value, meta) {
-                            if (value % 2 != 0) return const SizedBox.shrink();
-                            return Text(value.toInt().toString());
-                          },
-                        ),
-                      ),
-                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    barGroups: List.generate(moodEmojiMap.length, (index) {
-                      final mood = moodEmojiMap.entries.elementAt(index).key;
-                      final count = moodFrequency[mood]?.toDouble() ?? 0;
-                      return BarChartGroupData(
-                        x: index,
-                        barRods: [
-                          BarChartRodData(
-                            toY: count,
-                            width: 25, // バーの幅を広げる
-                            color: Colors.orange,
-                            borderRadius: BorderRadius.circular(6),
-                          )
-                        ],
-                      );
-                    }),
-                    gridData: FlGridData(show: true),
-                    borderData: FlBorderData(show: false),
-                    groupsSpace: 36, // グループ間のスペースを増やす
-                  ),
-                ),
               ),
               const SizedBox(height: 32),
 
@@ -476,6 +401,82 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
               ] else ...[
                 const Text('本日はすでに記録済みです', style: TextStyle(fontSize: 16, color: Colors.grey)),
               ],
+              
+              const SizedBox(height: 48),
+
+              // グラフ表示（一番下に移動）
+              SizedBox(
+                height: 300,
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: 10,
+                    barTouchData: BarTouchData(enabled: false),
+                    titlesData: FlTitlesData(
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 60,
+                          getTitlesWidget: (value, meta) {
+                            if (value.toInt() < 0 || value.toInt() >= moodEmojiMap.length) {
+                              return const SizedBox.shrink();
+                            }
+                            final mood = moodEmojiMap.entries.elementAt(value.toInt());
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    mood.value,
+                                    style: const TextStyle(fontSize: 20),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    mood.key,
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: 2,
+                          reservedSize: 30,
+                          getTitlesWidget: (value, meta) {
+                            if (value % 2 != 0) return const SizedBox.shrink();
+                            return Text(value.toInt().toString());
+                          },
+                        ),
+                      ),
+                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    ),
+                    barGroups: List.generate(moodEmojiMap.length, (index) {
+                      final mood = moodEmojiMap.entries.elementAt(index).key;
+                      final count = moodFrequency[mood]?.toDouble() ?? 0;
+                      return BarChartGroupData(
+                        x: index,
+                        barRods: [
+                          BarChartRodData(
+                            toY: count,
+                            width: 25,
+                            color: Colors.orange,
+                            borderRadius: BorderRadius.circular(6),
+                          )
+                        ],
+                      );
+                    }),
+                    gridData: FlGridData(show: true),
+                    borderData: FlBorderData(show: false),
+                    groupsSpace: 36,
+                  ),
+                ),
+              ),
             ],
           ),
         ),

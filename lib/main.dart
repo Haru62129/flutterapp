@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,8 +8,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
-void main() => runApp(const MoodDiaryApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('ja');
+  runApp(const MoodDiaryApp());
+}
 
 class MoodDiaryApp extends StatelessWidget {
   const MoodDiaryApp({super.key});
@@ -47,6 +51,7 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
   int selectedMonth = DateTime.now().month;
 
   File? _selectedImage;
+  String? selectedMoodFilter;
 
   late AnimationController _msgController;
   late Animation<double> _msgAnimation;
@@ -278,11 +283,220 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
     return moodCounts;
   }
 
+  List<MapEntry<String, dynamic>> _getFilteredMoodLog() {
+    final filteredEntries = moodLog.entries.where((entry) {
+      final date = DateTime.parse(entry.key);
+      final matchesDate = date.year == selectedYear && date.month == selectedMonth;
+      final matchesMood = selectedMoodFilter == null || entry.value['mood'] == selectedMoodFilter;
+      return matchesDate && matchesMood;
+    }).toList();
+
+    filteredEntries.sort((a, b) => b.key.compareTo(a.key));
+    return filteredEntries;
+  }
+
+  String _getMoodJapaneseName(String mood) {
+    const moodNames = {
+      'excited': 'とても嬉しい',
+      'happy': '嬉しい',
+      'neutral': '普通',
+      'sad': '悲しい',
+      'angry': '怒り',
+      'tired': '疲れ',
+    };
+    return moodNames[mood] ?? mood;
+  }
+
+  void _showEditMemoDialog(String dateKey, Map<String, dynamic> moodData) async {
+    String? editMood = moodData['mood'];
+    final TextEditingController editNoteController = TextEditingController(text: moodData['note']);
+    File? editImage = moodData['imagePath'] != null ? File(moodData['imagePath']) : null;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('${DateFormat('M月d日', 'ja').format(DateTime.parse(dateKey))}の記録を編集'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  children: moodEmojiMap.entries.map((e) => GestureDetector(
+                    onTap: () => setDialogState(() => editMood = e.key),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: CircleAvatar(
+                        backgroundColor: editMood == e.key ? Colors.orange : Colors.grey.shade200,
+                        child: Text(e.value, style: const TextStyle(fontSize: 24)),
+                      ),
+                    ),
+                  )).toList(),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: editNoteController,
+                  decoration: const InputDecoration(labelText: 'メモ'),
+                  maxLines: 3,
+                ),
+                if (editImage != null && editImage!.existsSync())
+                 Padding(
+                   padding: const EdgeInsets.only(top: 8),
+                   child: Image.file(editImage!, width: 80, height: 80),
+                  ),
+                TextButton.icon(
+                  icon: const Icon(Icons.image),
+                  label: const Text('画像変更'),
+                  onPressed: () async {
+                    final picker = ImagePicker();
+                    final picked = await picker.pickImage(source: ImageSource.gallery);
+                    if (picked != null) {
+                      final appDir = await getApplicationDocumentsDirectory();
+                      final fileName = path.basename(picked.path);
+                      final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
+                      setDialogState(() {
+                        editImage = savedImage;
+                      });
+                    }
+                  },
+                ),
+                if (editImage != null)
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete),
+                    label: const Text('画像削除'),
+                    onPressed: () {
+                      setDialogState(() {
+                        editImage = null;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('キャンセル'),
+              onPressed: () => Navigator.pop(context),
+            ),
+            TextButton(
+              child: const Text('保存'),
+              onPressed: () async {
+                setState(() {
+                  moodLog[dateKey] = {
+                    'mood': editMood,
+                    'note': editNoteController.text,
+                    'imagePath': editImage?.path,
+                  };
+                });
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('moodLog', jsonEncode(moodLog));
+                Navigator.pop(context);
+              },
+            ),
+            TextButton(
+              child: const Text('削除'),
+              onPressed: () async {
+                setState(() {
+                  moodLog.remove(dateKey);
+                });
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('moodLog', jsonEncode(moodLog));
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemoList() {
+    final filteredEntries = _getFilteredMoodLog();
+
+    if (filteredEntries.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            'メモがありません',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: filteredEntries.map((entry) {
+        final date = DateTime.parse(entry.key);
+        final moodData = entry.value;
+        final mood = moodData['mood'] as String;
+        final note = moodData['note'] as String? ?? '';
+        final imagePath = moodData['imagePath'] as String?;
+
+        return GestureDetector(
+          onTap: () => _showEditMemoDialog(entry.key, moodData),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade100),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      DateFormat('M月d日(E)', 'ja').format(date),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${moodEmojiMap[mood]} ${_getMoodJapaneseName(mood)}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                if (note.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    note,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ],
+                if (imagePath != null && File(imagePath).existsSync()) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      File(imagePath),
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final weeks = <String>[];
     final now = DateTime.now();
-    final firstDay = DateTime(selectedYear, selectedMonth, 1);
     final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
 
     for (int d = 1; d <= daysInMonth; d++) {
@@ -304,7 +518,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           child: Column(
             children: [
-              // 月選択ドロップダウン
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -322,6 +535,7 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                         setState(() {
                           selectedYear = val;
                           hasRecordedToday = false;
+                          selectedMoodFilter = null;
                           _loadMoodLog();
                         });
                       }
@@ -342,6 +556,7 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                         setState(() {
                           selectedMonth = val;
                           hasRecordedToday = false;
+                          selectedMoodFilter = null;
                           _loadMoodLog();
                         });
                       }
@@ -349,9 +564,33 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
-
-              // 今日の気分入力欄
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('気分フィルター:'),
+                  ...moodEmojiMap.entries.map((e) => GestureDetector(
+                    onTap: () => setState(() {
+                      selectedMoodFilter = selectedMoodFilter == e.key ? null : e.key;
+                    }),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: selectedMoodFilter == e.key ? Colors.orange[100] : Colors.grey.shade200,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(e.value, style: const TextStyle(fontSize: 24)),
+                    ),
+                  )),
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() => selectedMoodFilter = null),
+                    tooltip: 'フィルター解除',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
               if (!hasRecordedToday) ...[
                 const Text('今日の気分を選んでください', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
@@ -401,10 +640,17 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
               ] else ...[
                 const Text('本日はすでに記録済みです', style: TextStyle(fontSize: 16, color: Colors.grey)),
               ],
-              
-              const SizedBox(height: 48),
-
-              // グラフ表示（一番下に移動）
+              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'メモ一覧（タップで編集）',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange.shade700),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildMemoList(),
+              const SizedBox(height: 24),
               SizedBox(
                 height: 300,
                 child: BarChart(

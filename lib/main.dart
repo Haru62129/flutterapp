@@ -2,9 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -188,7 +185,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
   int? selectedWeek;
   final List<int?> weekFilterOptions = [null, 1, 2, 3, 4, 5];
 
-  File? _selectedImage;
   String? selectedMoodFilter;
 
   late AnimationController _msgController;
@@ -254,8 +250,9 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
 
   Future<void> _loadGoalPrefs() async {
     final prefs = await SharedPreferences.getInstance();
+    final loadedGoal = prefs.getString('selectedWeeklyGoal');
     setState(() {
-      selectedWeeklyGoal = prefs.getString('selectedWeeklyGoal');
+      selectedWeeklyGoal = (loadedGoal == null || loadedGoal.isEmpty) ? null : loadedGoal;
       goalAchieved = prefs.getBool('goalAchieved') ?? false;
       achievedBadges = (prefs.getStringList('achievedBadges') ?? []).toSet();
     });
@@ -269,19 +266,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
     await prefs.setStringList('achievedBadges', achievedBadges.toList());
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      final appDir = await getApplicationDocumentsDirectory();
-      final fileName = path.basename(picked.path);
-      final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
-      setState(() {
-        _selectedImage = savedImage;
-      });
-    }
-  }
-
   Future<void> saveTodayMood() async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final today = DateTime.now().toIso8601String().split('T')[0];
@@ -292,11 +276,10 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
       moodLog[today] = {
         'mood': selectedMood,
         'note': _noteController.text,
-        'imagePath': _selectedImage?.path,
+        'imagePath': null,
       };
       _noteController.clear();
       selectedMood = null;
-      _selectedImage = null;
       hasRecordedToday = true;
     });
 
@@ -380,7 +363,9 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
               ],
             ),
             DropdownButton<String>(
-              value: selectedWeeklyGoal,
+              value: (selectedWeeklyGoal != null && selectedWeeklyGoal!.isNotEmpty && weeklyGoals.contains(selectedWeeklyGoal))
+                  ? selectedWeeklyGoal
+                  : null,
               hint: const Text('目標を選択'),
               items: weeklyGoals.map((goal) => DropdownMenuItem(
                 value: goal,
@@ -440,21 +425,19 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
 
   Widget buildMoodSelector() {
     final themeType = widget.selectedTheme ?? getCurrentThemeType();
-    // 春・秋の朝と夜で明度や彩度を調整した見やすい色へ
     Color labelTextColor;
     if (themeType == ThemeType.springMorning) {
-      labelTextColor = const Color(0xFF4B2C5E); // 濃いラベンダー
+      labelTextColor = const Color(0xFF4B2C5E);
     } else if (themeType == ThemeType.springNight) {
-      labelTextColor = const Color(0xFFCA7FC2); // 明るいラベンダー
+      labelTextColor = const Color(0xFFCA7FC2);
     } else if (themeType == ThemeType.autumnMorning) {
-      labelTextColor = const Color(0xFF7B4B11); // ダークブラウン
+      labelTextColor = const Color(0xFF7B4B11);
     } else if (themeType == ThemeType.autumnNight) {
-      labelTextColor = const Color(0xFFDACB93); // 明るいベージュ
+      labelTextColor = const Color(0xFFDACB93);
     } else {
       labelTextColor = Colors.black;
     }
 
-    // "記録する"ボタンの文字色は常に黒
     Color recordButtonTextColor = Colors.black;
 
     return Column(
@@ -484,12 +467,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ElevatedButton.icon(
-              icon: const Icon(Icons.image),
-              label: const Text('画像選択'),
-              onPressed: _pickImage,
-            ),
-            const SizedBox(width: 16),
             ElevatedButton(
               onPressed: selectedMood == null ? null : saveTodayMood,
               style: ElevatedButton.styleFrom(
@@ -508,11 +485,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
             ),
           ],
         ),
-        if (_selectedImage != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Image.file(_selectedImage!, width: 120, height: 120, fit: BoxFit.cover),
-          ),
       ],
     );
   }
@@ -651,7 +623,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
         final moodData = entry.value;
         final mood = moodData['mood'] as String;
         final note = moodData['note'] as String? ?? '';
-        final imagePath = moodData['imagePath'] as String?;
         return GestureDetector(
           onTap: () => _showEditMemoDialog(entry.key, moodData),
           child: Container(
@@ -692,18 +663,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                     style: const TextStyle(fontSize: 14),
                   ),
                 ],
-                if (imagePath != null && File(imagePath).existsSync()) ...[
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
-                      File(imagePath),
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -715,7 +674,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
   void _showEditMemoDialog(String dateKey, Map<String, dynamic> moodData) async {
     String? editMood = moodData['mood'];
     final TextEditingController editNoteController = TextEditingController(text: moodData['note']);
-    File? editImage = moodData['imagePath'] != null ? File(moodData['imagePath']) : null;
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -747,37 +705,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                   decoration: const InputDecoration(labelText: 'メモ'),
                   maxLines: 3,
                 ),
-                if (editImage != null && editImage!.existsSync())
-                 Padding(
-                   padding: const EdgeInsets.only(top: 8),
-                   child: Image.file(editImage!, width: 80, height: 80),
-                  ),
-                TextButton.icon(
-                  icon: const Icon(Icons.image),
-                  label: const Text('画像変更'),
-                  onPressed: () async {
-                    final picker = ImagePicker();
-                    final picked = await picker.pickImage(source: ImageSource.gallery);
-                    if (picked != null) {
-                      final appDir = await getApplicationDocumentsDirectory();
-                      final fileName = path.basename(picked.path);
-                      final savedImage = await File(picked.path).copy('${appDir.path}/$fileName');
-                      setDialogState(() {
-                        editImage = savedImage;
-                      });
-                    }
-                  },
-                ),
-                if (editImage != null)
-                  TextButton.icon(
-                    icon: const Icon(Icons.delete),
-                    label: const Text('画像削除'),
-                    onPressed: () {
-                      setDialogState(() {
-                        editImage = null;
-                      });
-                    },
-                  ),
               ],
             ),
           ),
@@ -793,7 +720,7 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                   moodLog[dateKey] = {
                     'mood': editMood,
                     'note': editNoteController.text,
-                    'imagePath': editImage?.path,
+                    'imagePath': null,
                   };
                 });
                 final prefs = await SharedPreferences.getInstance();
@@ -915,7 +842,7 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black, // ひとことメッセージの文字色を黒に
+                      color: Colors.black,
                     ),
                     textAlign: TextAlign.center,
                   ),

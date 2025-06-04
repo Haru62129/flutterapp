@@ -1,14 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-// 目標リスト
-List<String> weeklyGoals = [
+// --- 目標リスト ---
+const List<String> weeklyGoals = [
   '毎日記録チャレンジ',
   '週5日以上記録',
   '3週連続記録',
@@ -43,8 +41,8 @@ List<String> weeklyGoals = [
   '【超高難度】無敗の継続王',
 ];
 
-// 達成条件マップ
-final Map<String, String> goalConditionMap = {
+// --- 達成条件マップ ---
+const Map<String, String> goalConditionMap = {
   '毎日記録チャレンジ': '1週間毎日記録をつける',
   '週5日以上記録': '週に5日以上記録する',
   '3週連続記録': '3週連続で週5日以上記録',
@@ -79,8 +77,8 @@ final Map<String, String> goalConditionMap = {
   '【超高難度】無敗の継続王': '60日間連続で気分を記録し、1日も抜けなし',
 };
 
-// バッジアイコンマップ
-final Map<String, IconData> goalBadgeMap = {
+// --- バッジアイコンマップ ---
+const Map<String, IconData> goalBadgeMap = {
   '毎日記録チャレンジ': Icons.menu_book,
   '週5日以上記録': Icons.calendar_today,
   '3週連続記録': Icons.emoji_events,
@@ -115,6 +113,7 @@ final Map<String, IconData> goalBadgeMap = {
   '【超高難度】無敗の継続王': Icons.emoji_events,
 };
 
+// テーマ
 enum ThemeType {
   springMorning,
   springNight,
@@ -137,6 +136,7 @@ const Map<ThemeType, String> themeJapaneseName = {
   ThemeType.winterNight: '冬・夜',
 };
 
+// --- メイン関数 ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ja');
@@ -301,7 +301,33 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
       setState(() => goalAchieved = false);
       return;
     }
-    // 目標ごとのロジックは省略
+    // 例：毎日記録チャレンジ
+    if (selectedWeeklyGoal == '毎日記録チャレンジ') {
+      final now = DateTime.now();
+      final weekDays = List.generate(7, (i) =>
+          DateTime(now.year, now.month, now.day - now.weekday + 1 + i));
+      final dates = weekDays.map((d) => d.toIso8601String().split('T')[0]);
+      final achieved = dates.every((d) => moodLog.containsKey(d));
+      setState(() {
+        goalAchieved = achieved;
+        if (achieved) achievedBadges.add(selectedWeeklyGoal!);
+      });
+      return;
+    }
+    if (selectedWeeklyGoal == '週5日以上記録') {
+      final now = DateTime.now();
+      final weekDays = List.generate(7, (i) =>
+          DateTime(now.year, now.month, now.day - now.weekday + 1 + i));
+      final dates = weekDays.map((d) => d.toIso8601String().split('T')[0]);
+      final count = dates.where((d) => moodLog.containsKey(d)).length;
+      final achieved = count >= 5;
+      setState(() {
+        goalAchieved = achieved;
+        if (achieved) achievedBadges.add(selectedWeeklyGoal!);
+      });
+      return;
+    }
+    // 他の目標達成ロジックも同様に分岐して実装してください
   }
 
   void _showBadgeListDialog() {
@@ -337,67 +363,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
     );
   }
 
-  Widget buildGoalSection() {
-    final isSpring = isSpringTheme(widget.selectedTheme ?? getCurrentThemeType());
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text('今週の目標', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const Spacer(),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.emoji_events, color: Colors.amber),
-                  label: const Text('バッジ一覧'),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.amber.shade700),
-                    foregroundColor: Colors.amber.shade800,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: _showBadgeListDialog,
-                ),
-              ],
-            ),
-            DropdownButton<String>(
-              value: (selectedWeeklyGoal != null && selectedWeeklyGoal!.isNotEmpty && weeklyGoals.contains(selectedWeeklyGoal))
-                  ? selectedWeeklyGoal
-                  : null,
-              hint: const Text('目標を選択'),
-              items: weeklyGoals.map((goal) => DropdownMenuItem(
-                value: goal,
-                child: Text(goal),
-              )).toList(),
-              onChanged: (value) async {
-                setState(() {
-                  selectedWeeklyGoal = value;
-                  goalAchieved = false;
-                });
-                checkGoalAchievement();
-                await _saveGoalPrefs();
-              },
-            ),
-            if (selectedWeeklyGoal != null)
-              Row(
-                children: [
-                  const Text('達成バッジ:'),
-                  Icon(goalBadgeMap[selectedWeeklyGoal!] ?? Icons.stars, color: goalAchieved ? (isSpring ? Colors.pink : Colors.orange) : Colors.grey),
-                  if (goalAchieved)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text('達成！', style: TextStyle(color: isSpring ? Colors.pink : Colors.orange, fontWeight: FontWeight.bold)),
-                    ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget buildThemeSelector() {
     return Row(
       children: [
@@ -415,176 +380,105 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
     );
   }
 
-  Widget buildDivider() {
-    return Divider(
-      thickness: 2,
-      color: Theme.of(context).dividerColor,
-      height: 32,
-    );
-  }
-
-  Widget buildMoodSelector() {
-    final themeType = widget.selectedTheme ?? getCurrentThemeType();
-    Color labelTextColor;
-    if (themeType == ThemeType.springMorning) {
-      labelTextColor = const Color(0xFF4B2C5E);
-    } else if (themeType == ThemeType.springNight) {
-      labelTextColor = const Color(0xFFCA7FC2);
-    } else if (themeType == ThemeType.autumnMorning) {
-      labelTextColor = const Color(0xFF7B4B11);
-    } else if (themeType == ThemeType.autumnNight) {
-      labelTextColor = const Color(0xFFDACB93);
-    } else {
-      labelTextColor = Colors.black;
-    }
-
-    Color recordButtonTextColor = Colors.black;
-
-    return Column(
-      children: [
-        const Text('今日の気分を選んでください', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        Wrap(
-          alignment: WrapAlignment.center,
-          children: moodEmojiMap.entries
-              .map((e) => buildMoodButton(e.value, e.key))
-              .toList(),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _noteController,
-          decoration: InputDecoration(
-            labelText: 'メモ（任意）',
-            labelStyle: TextStyle(color: labelTextColor),
-            border: const OutlineInputBorder(),
-            filled: true,
-            fillColor: Colors.white,
-          ),
-          style: const TextStyle(color: Colors.black),
-          maxLines: 3,
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-              onPressed: selectedMood == null ? null : saveTodayMood,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isSpringTheme(themeType) ? Colors.pink : Colors.orange,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              child: Text(
-                '記録する',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: recordButtonTextColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
   Widget buildFilterSection() {
     final now = DateTime.now();
     final isSpring = isSpringTheme(widget.selectedTheme ?? getCurrentThemeType());
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            DropdownButton<int>(
-              value: selectedYear,
-              items: List.generate(now.year - 2000 + 1, (index) {
-                final year = 2000 + index;
-                return DropdownMenuItem(
-                  value: year,
-                  child: Text('$year年'),
-                );
-              }),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    selectedYear = val;
-                    hasRecordedToday = false;
-                    selectedMoodFilter = null;
-                    selectedWeek = null;
-                    _loadMoodLog();
-                  });
-                }
-              },
-            ),
-            const SizedBox(width: 12),
-            DropdownButton<int>(
-              value: selectedMonth,
-              items: List.generate(12, (index) {
-                final month = index + 1;
-                return DropdownMenuItem(
-                  value: month,
-                  child: Text('$month月'),
-                );
-              }),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    selectedMonth = val;
-                    hasRecordedToday = false;
-                    selectedMoodFilter = null;
-                    selectedWeek = null;
-                    _loadMoodLog();
-                  });
-                }
-              },
-            ),
-            const SizedBox(width: 12),
-            DropdownButton<int?>(
-              value: selectedWeek,
-              hint: const Text('週'),
-              items: weekFilterOptions.map((i) => DropdownMenuItem(
-                value: i,
-                child: Text(i == null ? 'すべて' : '第${i}週'),
-              )).toList(),
-              onChanged: (val) {
-                setState(() {
-                  selectedWeek = val;
-                });
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('気分フィルター:'),
-            ...moodEmojiMap.entries.map((e) => GestureDetector(
-              onTap: () => setState(() {
-                selectedMoodFilter = selectedMoodFilter == e.key ? null : e.key;
-              }),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: selectedMoodFilter == e.key
-                      ? (isSpring ? Colors.pink[100] : Colors.orange[100])
-                      : Colors.grey.shade200,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(e.value, style: const TextStyle(fontSize: 24)),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              DropdownButton<int>(
+                value: selectedYear,
+                items: List.generate(now.year - 2000 + 1, (index) {
+                  final year = 2000 + index;
+                  return DropdownMenuItem(
+                    value: year,
+                    child: Text('$year年'),
+                  );
+                }),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      selectedYear = val;
+                      hasRecordedToday = false;
+                      selectedMoodFilter = null;
+                      selectedWeek = null;
+                      _loadMoodLog();
+                    });
+                  }
+                },
               ),
-            )),
-            IconButton(
-              icon: const Icon(Icons.clear),
-              onPressed: () => setState(() => selectedMoodFilter = null),
-              tooltip: 'フィルター解除',
-            ),
-          ],
-        ),
-      ],
+              const SizedBox(width: 12),
+              DropdownButton<int>(
+                value: selectedMonth,
+                items: List.generate(12, (index) {
+                  final month = index + 1;
+                  return DropdownMenuItem(
+                    value: month,
+                    child: Text('$month月'),
+                  );
+                }),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      selectedMonth = val;
+                      hasRecordedToday = false;
+                      selectedMoodFilter = null;
+                      selectedWeek = null;
+                      _loadMoodLog();
+                    });
+                  }
+                },
+              ),
+              const SizedBox(width: 12),
+              DropdownButton<int?>(
+                value: selectedWeek,
+                hint: const Text('週'),
+                items: weekFilterOptions.map((i) => DropdownMenuItem(
+                  value: i,
+                  child: Text(i == null ? 'すべて' : '第${i}週'),
+                )).toList(),
+                onChanged: (val) {
+                  setState(() {
+                    selectedWeek = val;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('気分フィルター:'),
+              ...moodEmojiMap.entries.map((e) => GestureDetector(
+                onTap: () => setState(() {
+                  selectedMoodFilter = selectedMoodFilter == e.key ? null : e.key;
+                }),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: selectedMoodFilter == e.key
+                        ? (isSpring ? Colors.pink[100] : Colors.orange[100])
+                        : Colors.grey.shade200,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(e.value, style: const TextStyle(fontSize: 24)),
+                ),
+              )),
+              IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () => setState(() => selectedMoodFilter = null),
+                tooltip: 'フィルター解除',
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -865,92 +759,184 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
     );
   }
 
-  Widget buildMoodButton(String emoji, String mood) {
-    final isSelected = selectedMood == mood;
-    final isSpring = isSpringTheme(widget.selectedTheme ?? getCurrentThemeType());
-    return GestureDetector(
-      onTap: hasRecordedToday ? null : () => setState(() => selectedMood = mood),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
-        margin: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (isSpring ? Colors.pink[100] : Colors.orange[100])
-              : (isSpring ? Colors.pink[50] : Colors.orange[50]),
-          shape: BoxShape.circle,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: isSpring ? Colors.pink.shade200 : Colors.orange.shade200,
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                  )
-                ]
-              : [],
-        ),
-        child: isSelected
-            ? ScaleTransition(
-                scale: Tween<double>(begin: 1.0, end: 1.3)
-                    .animate(CurvedAnimation(parent: _msgController, curve: Curves.easeInOut)),
-                child: Text(emoji, style: const TextStyle(fontSize: 32)),
-              )
-            : Text(emoji, style: const TextStyle(fontSize: 32)),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final moodFrequency = _generateMoodFrequencyByWeek();
+    final themeType = widget.selectedTheme ?? getCurrentThemeType();
+    final isNight = themeType == ThemeType.springNight ||
+        themeType == ThemeType.summerNight ||
+        themeType == ThemeType.autumnNight ||
+        themeType == ThemeType.winterNight;
+    final isSpring = isSpringTheme(themeType);
+
+    Color labelTextColor;
+    if (themeType == ThemeType.springMorning) {
+      labelTextColor = const Color(0xFF4B2C5E);
+    } else if (themeType == ThemeType.springNight) {
+      labelTextColor = const Color(0xFFCA7FC2);
+    } else if (themeType == ThemeType.autumnMorning) {
+      labelTextColor = const Color(0xFF7B4B11);
+    } else if (themeType == ThemeType.autumnNight) {
+      labelTextColor = const Color(0xFFDACB93);
+    } else {
+      labelTextColor = Colors.black;
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('きぶん日記'),
-        centerTitle: true,
-        backgroundColor: Colors.orange,
+        title: const Text('きぶん日記', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: buildThemeSelector(),
           ),
         ],
+        backgroundColor: isSpring ? Colors.pink : Colors.orange,
+        centerTitle: true,
+        elevation: 2,
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              buildGoalSection(),
-              buildDivider(),
-              if (!hasRecordedToday)
-                buildMoodSelector()
-              else
-                const Text('本日はすでに記録済みです',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                  textAlign: TextAlign.center,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          children: [
+            Card(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              elevation: 3,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('今週の目標', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const Spacer(),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.emoji_events, color: Colors.amber),
+                          label: const Text('バッジ一覧'),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.amber.shade700),
+                            foregroundColor: Colors.amber.shade800,
+                          ),
+                          onPressed: _showBadgeListDialog,
+                        ),
+                      ],
+                    ),
+                    DropdownButton<String>(
+                      value: (selectedWeeklyGoal != null && selectedWeeklyGoal!.isNotEmpty && weeklyGoals.contains(selectedWeeklyGoal))
+                          ? selectedWeeklyGoal
+                          : null,
+                      hint: const Text('目標を選択'),
+                      items: weeklyGoals.map((goal) => DropdownMenuItem(
+                        value: goal,
+                        child: Text(goal),
+                      )).toList(),
+                      onChanged: (value) async {
+                        setState(() {
+                          selectedWeeklyGoal = value;
+                          goalAchieved = false;
+                        });
+                        checkGoalAchievement();
+                        await _saveGoalPrefs();
+                      },
+                    ),
+                    if (selectedWeeklyGoal != null)
+                      Row(
+                        children: [
+                          const Text('達成バッジ:'),
+                          Icon(goalBadgeMap[selectedWeeklyGoal!] ?? Icons.stars, color: goalAchieved ? (isSpring ? Colors.pink : Colors.orange) : Colors.grey),
+                          if (goalAchieved)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text('達成！', style: TextStyle(color: isSpring ? Colors.pink : Colors.orange,fontWeight: FontWeight.bold)),
+                            ),
+                        ],
+                      ),
+                  ],
                 ),
-              buildDivider(),
-              buildFilterSection(),
-              Align(
-                alignment: Alignment.centerLeft,
+              ),
+            ),
+            Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: hasRecordedToday
+                    ? const Center(child: Text('本日はすでに記録済みです', style: TextStyle(color: Colors.grey, fontSize: 16)))
+                    : Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Text('気分を選んでください', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      children: moodEmojiMap.entries.map((e) => GestureDetector(
+                        onTap: () => setState(() => selectedMood = e.key),
+                        child: CircleAvatar(
+                          backgroundColor: selectedMood == e.key ? (isSpring ? Colors.pink.shade200 : Colors.orange.shade200) : Colors.grey.shade200,
+                          radius: 26,
+                          child: Text(e.value, style: const TextStyle(fontSize: 30)),
+                        ),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _noteController,
+                      decoration: InputDecoration(
+                        labelText: 'メモ（任意）',
+                        labelStyle: TextStyle(
+                          color: isNight
+                              ? Colors.black
+                              : labelTextColor,
+                        ),
+                        border: const OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      style: const TextStyle(color: Colors.black),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.save),
+                      label: const Text('記録する', style: TextStyle(fontSize: 18)),
+                      onPressed: selectedMood == null ? null : saveTodayMood,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isSpring ? Colors.pink : Colors.orange,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size.fromHeight(44),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            buildFilterSection(),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 16, left: 4, bottom: 8),
                 child: Text(
                   'メモ一覧（タップで編集）',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: isSpringTheme(widget.selectedTheme ?? getCurrentThemeType())
+                    color: isSpring
                         ? Colors.pink.shade700
                         : Colors.orange.shade700,
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              _buildMemoList(),
-              buildDivider(),
-              SizedBox(
-                height: 300,
+            ),
+            _buildMemoList(),
+            Padding(
+              padding: const EdgeInsets.only(top: 24.0),
+              child: SizedBox(
+                height: 260,
                 child: BarChart(
                   BarChartData(
                     alignment: BarChartAlignment.spaceAround,
@@ -1009,7 +995,7 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                           BarChartRodData(
                             toY: count,
                             width: 25,
-                            color: isSpringTheme(widget.selectedTheme ?? getCurrentThemeType()) ? Colors.pink : Colors.orange,
+                            color: isSpring ? Colors.pink : Colors.orange,
                             borderRadius: BorderRadius.circular(6),
                           )
                         ],
@@ -1021,8 +1007,8 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,3 +1,5 @@
+// ... 省略なしで全コード、グラフのバランスを修正 ...
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,7 +79,6 @@ const Map<String, String> goalConditionMap = {
   '【超高難度】無敗の継続王': '60日間連続で気分を記録し、1日も抜けなし',
 };
 
-// --- バッジアイコンマップ ---
 const Map<String, IconData> goalBadgeMap = {
   '毎日記録チャレンジ': Icons.menu_book,
   '週5日以上記録': Icons.calendar_today,
@@ -113,7 +114,16 @@ const Map<String, IconData> goalBadgeMap = {
   '【超高難度】無敗の継続王': Icons.emoji_events,
 };
 
-// テーマ
+final List<String> moodKeys = ['excited', 'happy', 'neutral', 'sad', 'angry', 'tired'];
+final Map<String, String> moodEmojiMap = {
+  'excited': '🤩',
+  'happy': '😄',
+  'neutral': '😐',
+  'sad': '😢',
+  'angry': '😡',
+  'tired': '😴',
+};
+
 enum ThemeType {
   springMorning,
   springNight,
@@ -124,7 +134,6 @@ enum ThemeType {
   winterMorning,
   winterNight,
 }
-
 const Map<ThemeType, String> themeJapaneseName = {
   ThemeType.springMorning: '春・朝',
   ThemeType.springNight: '春・夜',
@@ -136,7 +145,6 @@ const Map<ThemeType, String> themeJapaneseName = {
   ThemeType.winterNight: '冬・夜',
 };
 
-// --- メイン関数 ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ja');
@@ -184,7 +192,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
   int selectedMonth = DateTime.now().month;
   int? selectedWeek;
   final List<int?> weekFilterOptions = [null, 1, 2, 3, 4, 5];
-
   String? selectedMoodFilter;
 
   late AnimationController _msgController;
@@ -201,15 +208,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
     'sad': ['大丈夫、明日はきっと', 'ゆっくり休んでね', '辛い時もあるよね'],
     'angry': ['深呼吸しよう', '気持ちを落ち着けて', 'イライラはバイバイ！'],
     'tired': ['よく頑張ったね', 'ゆっくり休んでね', '疲れは溜めすぎないで'],
-  };
-
-  final Map<String, String> moodEmojiMap = {
-    'excited': '🤩',
-    'happy': '😄',
-    'neutral': '😐',
-    'sad': '😢',
-    'angry': '😡',
-    'tired': '😴',
   };
 
   @override
@@ -301,7 +299,6 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
       setState(() => goalAchieved = false);
       return;
     }
-    // 例：毎日記録チャレンジ
     if (selectedWeeklyGoal == '毎日記録チャレンジ') {
       final now = DateTime.now();
       final weekDays = List.generate(7, (i) =>
@@ -656,35 +653,15 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
   }
 
   Map<String, int> _generateMoodFrequencyByWeek() {
-    final result = <String, Map<String, int>>{};
+    final moodCounts = { for (var m in moodKeys) m: 0 };
     moodLog.forEach((dateStr, entry) {
       final date = DateTime.parse(dateStr);
       if (date.year == selectedYear && date.month == selectedMonth) {
-        final weekLabel = formatWeekLabel(date);
         final mood = entry['mood'];
-        result.putIfAbsent(weekLabel, () => {
-          'excited': 0,
-          'happy': 0,
-          'neutral': 0,
-          'sad': 0,
-          'angry': 0,
-          'tired': 0,
-        });
-        result[weekLabel]![mood] = result[weekLabel]![mood]! + 1;
+        if (moodCounts.containsKey(mood)) {
+          moodCounts[mood] = moodCounts[mood]! + 1;
+        }
       }
-    });
-    final moodCounts = <String, int>{
-      'excited': 0,
-      'happy': 0,
-      'neutral': 0,
-      'sad': 0,
-      'angry': 0,
-      'tired': 0,
-    };
-    result.forEach((week, moods) {
-      moods.forEach((mood, count) {
-        moodCounts[mood] = moodCounts[mood]! + count;
-      });
     });
     return moodCounts;
   }
@@ -934,80 +911,104 @@ class _MoodHomePageState extends State<MoodHomePage> with SingleTickerProviderSt
             ),
             _buildMemoList(),
             Padding(
-              padding: const EdgeInsets.only(top: 24.0),
-              child: SizedBox(
-                height: 260,
-                child: BarChart(
-                  BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    maxY: 10,
-                    barTouchData: BarTouchData(enabled: false),
-                    titlesData: FlTitlesData(
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 60,
-                          getTitlesWidget: (value, meta) {
-                            if (value.toInt() < 0 || value.toInt() >= moodEmojiMap.length) {
-                              return const SizedBox.shrink();
-                            }
-                            final mood = moodEmojiMap.entries.elementAt(value.toInt());
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    mood.value,
-                                    style: const TextStyle(fontSize: 20),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    mood.key,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          interval: 2,
-                          reservedSize: 30,
-                          getTitlesWidget: (value, meta) {
-                            if (value % 2 != 0) return const SizedBox.shrink();
-                            return Text(value.toInt().toString());
-                          },
-                        ),
-                      ),
-                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    barGroups: List.generate(moodEmojiMap.length, (index) {
-                      final mood = moodEmojiMap.entries.elementAt(index).key;
-                      final count = moodFrequency[mood]?.toDouble() ?? 0;
-                      return BarChartGroupData(
-                        x: index,
-                        barRods: [
-                          BarChartRodData(
-                            toY: count,
-                            width: 25,
-                            color: isSpring ? Colors.pink : Colors.orange,
-                            borderRadius: BorderRadius.circular(6),
-                          )
-                        ],
-                      );
-                    }),
-                    gridData: FlGridData(show: true),
-                    borderData: FlBorderData(show: false),
-                    groupsSpace: 36,
-                  ),
-                ),
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Divider(
+                color: isSpring ? Colors.pink.shade200 : Colors.orange.shade200,
+                thickness: 2,
               ),
             ),
+            // --- バランス良くグラフを中央・均等配置 ---
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // 棒グラフの本体は、グリッド線の中央に棒を置けるようにするため、
+                // 横幅を動的に計算し、左右に余白をつけて中央寄せ
+                final double chartWidth = constraints.maxWidth;
+                final int n = moodKeys.length;
+                // 1本の棒＋ラベルに割り当てる幅
+                final double barSection = chartWidth / n;
+                // 棒自体の幅
+                final double barWidth = barSection * 0.4; // 40%だけ棒、それ以外はスペース
+                final double leftPad = barSection * 0.3; // 左端余白
+                final double rightPad = barSection * 0.3; // 右端余白
+
+                return Padding(
+                  padding: EdgeInsets.only(left: leftPad, right: rightPad),
+                  child: SizedBox(
+                    height: 440,
+                    width: chartWidth - leftPad - rightPad,
+                    child: BarChart(
+                      BarChartData(
+                        alignment: BarChartAlignment.spaceAround,
+                        maxY: 10,
+                        barTouchData: BarTouchData(enabled: false),
+                        titlesData: FlTitlesData(
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 46,
+                              getTitlesWidget: (value, meta) {
+                                int idx = value.toInt();
+                                if (idx < 0 || idx >= moodKeys.length) return const SizedBox.shrink();
+                                final mood = moodKeys[idx];
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 2.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        moodEmojiMap[mood]!,
+                                        style: const TextStyle(fontSize: 18),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        mood,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              interval: 2,
+                              reservedSize: 30,
+                              getTitlesWidget: (value, meta) {
+                                if (value % 2 != 0) return const SizedBox.shrink();
+                                return Text(value.toInt().toString());
+                              },
+                            ),
+                          ),
+                          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        ),
+                        barGroups: List.generate(moodKeys.length, (index) {
+                          final mood = moodKeys[index];
+                          final count = moodFrequency[mood]?.toDouble() ?? 0;
+                          return BarChartGroupData(
+                            x: index,
+                            barRods: [
+                              BarChartRodData(
+                                toY: count,
+                                width: barWidth,
+                                color: isSpring ? Colors.pink : Colors.orange,
+                                borderRadius: BorderRadius.circular(6),
+                              )
+                            ],
+                          );
+                        }),
+                        gridData: FlGridData(show: true),
+                        borderData: FlBorderData(show: false),
+                        groupsSpace: barSection * 0.2,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            // --- BarChartここまで ---
           ],
         ),
       ),
